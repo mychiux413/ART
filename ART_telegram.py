@@ -53,6 +53,18 @@ def start(bot, update):
 
     return LANG
 
+def is_eth_valid(eth_address):
+    if eth_address[:2] == '0x':
+        return True
+    else:
+        return False
+        
+def is_email_valid(email_address):
+    if email_address.find('@') > -1:
+        return True
+    else:
+        return False
+    
 def show_infos(update, topic, lang, replacer={}):
     reply = INFOS[INFOS['topic'] == topic][lang.lower()].iloc[0]
     if pd.isnull(reply):
@@ -65,6 +77,20 @@ def show_infos(update, topic, lang, replacer={}):
     print(reply)
     update.message.reply_text(reply)
 
+def get_lang(tiny, user):
+    lang = tiny.get_user_profiles(user.id, ['lang'])['lang']
+    if lang is None:
+        lang = user.language_code
+        tiny.set_user_profiles(user.id, {'lang':lang})
+    return lang
+    
+def help(bot, update):
+    tiny.connect()
+    user = update.message.from_user
+    
+    lang = get_lang(tiny, user)
+    show_infos(update, 'help', lang)
+    
 def set_lang(bot, update, args):
     tiny.connect()
     user = update.message.from_user
@@ -74,13 +100,10 @@ def set_lang(bot, update, args):
         show_infos(update, 'not_claimed', user.language_code, replacer = {'\$username': user.username})
         return None
     
+    current_lang = get_lang(tiny, user)
     if len(args) > 0:
         lang = str(args[0])
         if lang not in LANG_TAGS:
-            current_lang = tiny.get_user_profiles(user.id, ['lang'])['lang']
-            if current_lang is None:
-                current_lang = user.language_code
-                tiny.set_user_profiles(user.id, {'lang':current_lang})
             show_infos(update, 'wrong_lang', current_lang,
             {'\$username': user.username,
             '\$lang':lang,
@@ -95,26 +118,94 @@ def set_lang(bot, update, args):
             '\$lang':lang}
             )
     else:
-        show_infos(update, 'set_lang', user.language_code)
+        show_infos(update, 'set_lang', current_lang,
+            {'\$username': user.username,
+            '\$current_lang':current_lang}
+            )
 
-def eth(bot, update):
-    tiny = Tiny_referrals(db_path='referrals.sqlite')
+def set_eth(bot, update, args):
+    tiny.connect()
     user = update.message.from_user
-    tiny.set_user_profiles(user.id, {'eth':update.message.text})
-    logger.info("ETH of %s: %s", user.first_name, update.message.text)
-    update.message.reply_text('set email.',
-                              reply_markup=ReplyKeyboardRemove())
+    
+    # check user exist or not
+    if not tiny.user_exist(user.id):
+        show_infos(update, 'not_claimed', user.language_code, replacer = {'\$username': user.username})
+        return None
+    
+    lang = get_lang(tiny, user)
+    if len(args) > 0:
+        eth_address = str(args[0])
+        if is_eth_valid(eth_address):
+            tiny.set_user_profiles(user.id, {'eth':eth_address})
+            show_infos(update, 'set_eth_done', lang,
+            {'\$username': user.username,
+            '\$current_eth':eth_address}
+            )
+        else:
+            current_eth_address = tiny.get_user_profiles(user.id, ['eth'])['eth']
+            current_eth_address = 'none' if current_eth_address is None else current_eth_address
+            show_infos(update, 'wrong_eth', lang,
+            {'\$username': user.username,
+            '\$eth':eth_address,
+            '\$current_eth':current_eth_address}
+            )
+            return None
+    else:
+        
+               
+        current_eth_address = tiny.get_user_profiles(user.id, ['eth'])['eth']
+        current_eth_address = 'none' if current_eth_address is None else current_eth_address
+        show_infos(update, 'set_eth', lang,
+            {'\$username': user.username,
+            '\$current_eth':current_eth_address}
+            )
 
-    return EMAIL
-
-def email(bot, update):
-    tiny = Tiny_referrals(db_path='referrals.sqlite')
+def set_email(bot, update, args):
+    tiny.connect()
     user = update.message.from_user
-    tiny.set_user_profiles(user.id, {'email':update.message.text})
-    referral = tiny.request_referral(user_id=user.id)
-    logger.info("EMAIL of %s: %s", user.first_name, update.message.text)
-    update.message.reply_text('Thanks, your referral is %s, send /profile to check your profile.' %
-    (referral.decode('utf8'),))
+    
+    # check user exist or not
+    if not tiny.user_exist(user.id):
+        show_infos(update, 'not_claimed', user.language_code, replacer = {'\$username': user.username})
+        return None
+    
+    lang = get_lang(tiny, user)
+        
+    if len(args) > 0:
+        email_address = str(args[0])
+        if is_email_valid(email_address):
+            tiny.set_user_profiles(user.id, {'email':email_address})
+            show_infos(update, 'set_email_done', lang,
+            {'\$username': user.username,
+            '\$current_email':email_address}
+            )
+        else:
+            current_email_address = tiny.get_user_profiles(user.id, ['email'])['email']
+            current_email_address = 'none' if current_email_address is None else current_email_address
+            show_infos(update, 'wrong_email', lang,
+            {'\$username': user.username,
+            '\$email':email_address,
+            '\$current_email':current_email_address}
+            )
+            return None
+    else:
+        
+               
+        current_email_address = tiny.get_user_profiles(user.id, ['email'])['email']
+        current_email_address = 'none' if current_email_address is None else current_email_address
+        show_infos(update, 'set_email', lang,
+            {'\$username': user.username,
+            '\$current_email':current_email_address}
+            )
+            
+# def email(bot, update):
+    # tiny = Tiny_referrals(db_path='referrals.sqlite')
+    # user = update.message.from_user
+    # tiny.set_user_profiles(user.id, {'email':update.message.text})
+    # referral = tiny.request_referral(user_id=user.id)
+    # logger.info("EMAIL of %s: %s", user.first_name, update.message.text)
+    # update.message.reply_text('Thanks, your referral is %s, send /profile to check your profile.' %
+    # (referral.decode('utf8'),))
 
     return REFERRAL
 
@@ -127,16 +218,22 @@ def referral(bot, update):
     return LOCATION
 
 def profile(bot, update):
-    tiny = Tiny_referrals(db_path='referrals.sqlite')
+    tiny.connect()
     user = update.message.from_user
+    # check user exist or not
+    if not tiny.user_exist(user.id):
+        show_infos(update, 'not_claimed', user.language_code, replacer = {'\$username': user.username})
+        return None
+    lang = get_lang(tiny, user)
     
-    referral = tiny.request_referral(user_id=user.id)
-    profile = tiny.get_user_profiles(user.id, ['email', 'lang', 'eth', 'referral'])
-
-    update.message.reply_text('your profile: email: %s, language: %s, ETH address: %s, referral: %s' %
-    (profile.get('email'), profile.get('lang'), profile.get('eth'), profile.get('referral')))
-
-    return None
+    profiles = tiny.get_user_profiles(user.id, ['eth', 'email', 'lang'])
+    show_infos(update, 'profile', lang,
+            {'\$username': user.username,
+            '\$eth': profiles['eth'],
+            '\$email': profiles['email'],
+            '\$lang': profiles['lang']
+            }
+            )
 
 def location(bot, update):
     user = update.message.from_user
@@ -186,7 +283,13 @@ def main():
 
     # Get the dispatcher to register handlers
     dp = updater.dispatcher
+    dp.add_handler(CommandHandler("help", help))
+    dp.add_handler(CommandHandler("profile", profile))
     dp.add_handler(CommandHandler("lang", set_lang,
+                                  pass_args=True))
+    dp.add_handler(CommandHandler("eth", set_eth,
+                                  pass_args=True))
+    dp.add_handler(CommandHandler("email", set_email,
                                   pass_args=True))
     # dp.add_handler(CommandHandler("lang", set_lang,
                                   # pass_args=True))
@@ -220,15 +323,9 @@ def main():
         # fallbacks=[CommandHandler('cancel', cancel)]
     # )
     
-    profile_handler = ConversationHandler(
-        entry_points=[CommandHandler('profile', profile)],
-        states={},
-        fallbacks=[]
-    )
 
     # dp.add_handler(conv_handler)
     
-    dp.add_handler(profile_handler)
 
     # log all errors
     dp.add_error_handler(error)
