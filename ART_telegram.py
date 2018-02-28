@@ -32,7 +32,7 @@ with open('lang_list', 'r') as thefile:
 INFOS = pd.read_excel('infos.xlsx')
 
 tiny = Tiny_referrals(db_path='referrals.sqlite', REFERRAL_SZIE=1000000, REFFERAL_LENGTH=8, overwrite=False,
-                      field_names_text=['eth','lang','email'])
+                      field_names_text=['eth', 'lang', 'email'], field_names_num=['token'], CLAIMED_KEYS=['eth', 'email'])
 
 # Enable logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -40,19 +40,86 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 
 logger = logging.getLogger(__name__)
 
-LANG, SET_LANG, ETH, REFERRAL, EMAIL, SCORE, PROFILE = range(7)
+GUIDE_ETH, GUIDE_EMAIL, GUIDE_REFERRAL = range(3)
+
+# reply_keyboard = [['go', 'cancel']]
+# markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False)
+
+def start(bot, update, args):
+    if len(args) > 0:
+        update.message.reply_text('The referral code is {}'.format(args[0]))
+    tiny.connect()
+    user = update.message.from_user
+    lang = get_lang(tiny, user)
+
+    #if not tiny.user_claimed(user.id):
+    if True:
+        reply_keyboard = [['Set Profile', 'Maybe Later']]
+        markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+        update = show_infos(update, 'start_new', lang, replacer={}, reply_markup=markup)
+        return GUIDE_ETH
+    else:
+        profiles = tiny.get_user_profiles(user.id, ['eth', 'email', 'lang', 'referral', 'token'])
+        show_infos(update, 'start_old', lang,
+                {'\$username': user.username,
+                '\$eth': profiles['eth'],
+                '\$email': profiles['email'],
+                '\$lang': profiles['lang'],
+                '\$referral': profiles['referral'],
+                '\$token': profiles['token']
+                }
+                )
 
 
-def start(bot, update):
+        return None
+        
+def guide_eth(bot, update):
+    print('we are in guide_eth')
+    tiny.connect()
+    user = update.message.from_user
+    lang = get_lang(tiny, user)
+    
+    if update.message.text == 'Maybe Later':
+        return None
+    elif update.message.text == 'Set Profile':
+        show_infos(update, 'guide_eth',
+        lang)
+        return GUIDE_EMAIL
 
-    reply_keyboard = [['zh-cn', 'en', 'kr']]
-
-    update.message.reply_text(
-        'Set your Language.',
-        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True))
-
-    return LANG
-
+def guide_email(bot, update):
+    tiny.connect()
+    user = update.message.from_user
+    lang = get_lang(tiny, user)
+    
+    eth_address = update.message.text
+    if is_eth_valid(eth_address):
+        tiny.set_user_profiles(user.id, {'eth': eth_address})
+        show_infos(update, 'guide_email', lang,
+            {'\$eth':eth_address}
+            )
+        return GUIDE_REFERRAL
+    else:
+        show_infos(update, 'guide_eth_invalid', lang,
+            {'\$eth':eth_address}
+            )
+        return GUIDE_EMAIL
+        
+    
+def guide_referral(bot, update):
+    tiny.connect()
+    user = update.message.from_user
+    lang = get_lang(tiny, user)
+    
+    email_address = update.message.text
+    if is_email_valid(email_address):
+        tiny.set_user_profiles(user.id, {'email': email_address, 'token':100})
+        get_referral(bot, update)
+    else:
+        show_infos(update, 'guide_email_invalid', lang,
+            {'\$email':email_address}
+            )
+        return GUIDE_REFERRAL
+    
 def is_eth_valid(eth_address):
     if eth_address[:2] == '0x':
         return True
@@ -65,8 +132,18 @@ def is_email_valid(email_address):
     else:
         return False
     
-def show_infos(update, topic, lang, replacer={}):
-    reply = INFOS[INFOS['topic'] == topic][lang.lower()].iloc[0]
+def show_infos(update, topic, lang, replacer={}, reply_markup=None):
+    try:
+        reply = INFOS[INFOS['topic'] == topic][lang.lower()].iloc[0]
+    except:
+        reply = INFOS[INFOS['topic'] == topic]['en'].iloc[0]
+    
+    for k, v in replacer.items():
+        if v is None:
+            replacer[k] = 'null'
+        elif not isinstance(v, str):
+            replacer[k] = str(v)
+    
     if pd.isnull(reply):
         reply = INFOS[INFOS['topic'] == topic]['en'].iloc[0]
         if pd.isnull(reply):
@@ -75,14 +152,21 @@ def show_infos(update, topic, lang, replacer={}):
         reply = re.sub(place_holder, rep, reply)
     print('=== reply ===')
     print(reply)
-    update.message.reply_text(reply)
+    if reply_markup:
+        update.message.reply_text(reply, reply_markup=reply_markup)
+    else:
+        update.message.reply_text(reply)
+    return update
 
 def get_lang(tiny, user):
-    lang = tiny.get_user_profiles(user.id, ['lang'])['lang']
-    if lang is None:
-        lang = user.language_code
-        tiny.set_user_profiles(user.id, {'lang':lang})
-    return lang
+    try:
+        lang = tiny.get_user_profiles(user.id, ['lang'])['lang']
+        if lang is None:
+            lang = user.language_code
+            tiny.set_user_profiles(user.id, {'lang':lang})
+        return lang
+    except:
+        return 'en'
     
 def help(bot, update):
     tiny.connect()
@@ -197,44 +281,63 @@ def set_email(bot, update, args):
             {'\$username': user.username,
             '\$current_email':current_email_address}
             )
-            
-# def email(bot, update):
-    # tiny = Tiny_referrals(db_path='referrals.sqlite')
-    # user = update.message.from_user
-    # tiny.set_user_profiles(user.id, {'email':update.message.text})
-    # referral = tiny.request_referral(user_id=user.id)
-    # logger.info("EMAIL of %s: %s", user.first_name, update.message.text)
-    # update.message.reply_text('Thanks, your referral is %s, send /profile to check your profile.' %
-    # (referral.decode('utf8'),))
 
-    return REFERRAL
 
-def referral(bot, update):
-    user = update.message.from_user
-    logger.info("User %s did not send a photo.", user.id)
-    update.message.reply_text('I bet you look great! Now, send me your location please, '
-                              'or send /skip.')
-
-    return LOCATION
-
-def profile(bot, update):
+def get_profile(bot, update):
     tiny.connect()
     user = update.message.from_user
     # check user exist or not
-    if not tiny.user_exist(user.id):
+    if not tiny.user_claimed(user.id):
         show_infos(update, 'not_claimed', user.language_code, replacer = {'\$username': user.username})
         return None
     lang = get_lang(tiny, user)
     
-    profiles = tiny.get_user_profiles(user.id, ['eth', 'email', 'lang'])
+    profiles = tiny.get_user_profiles(user.id, ['eth', 'email', 'lang', 'referral', 'token'])
     show_infos(update, 'profile', lang,
             {'\$username': user.username,
             '\$eth': profiles['eth'],
             '\$email': profiles['email'],
-            '\$lang': profiles['lang']
+            '\$lang': profiles['lang'],
+            '\$referral': profiles['referral'],
+            '\$token': profiles['token']
             }
             )
-
+def get_token(bot, update):
+    tiny.connect()
+    user = update.message.from_user
+    # check user exist or not
+    if not tiny.user_claimed(user.id):
+        show_infos(update, 'not_claimed', user.language_code, replacer = {'\$username': user.username})
+        return None
+    lang = get_lang(tiny, user)
+    
+    profiles = tiny.get_user_profiles(user.id, ['token', 'referral'])
+    show_infos(update, 'claim', lang,
+            {'\$username': user.username,
+            '\$token': profiles['token'],
+            '\$referral': profiles['referral']
+            }
+            )
+def get_referral(bot, update):
+    tiny.connect()
+    user = update.message.from_user
+    # check user exist or not
+    if not tiny.user_claimed(user.id):
+        show_infos(update, 'not_claimed', user.language_code, replacer = {'\$username': user.username})
+        return None
+    lang = get_lang(tiny, user)
+    
+    profiles = tiny.get_user_profiles(user.id, ['eth', 'email', 'lang', 'referral', 'token'])
+    show_infos(update, 'profile', lang,
+            {'\$username': user.username,
+            '\$eth': profiles['eth'],
+            '\$email': profiles['email'],
+            '\$lang': profiles['lang'],
+            '\$referral': profiles['referral'],
+            '\$token': profiles['token']
+            }
+            )
+            
 def location(bot, update):
     user = update.message.from_user
     user_location = update.message.location
@@ -284,13 +387,16 @@ def main():
     # Get the dispatcher to register handlers
     dp = updater.dispatcher
     dp.add_handler(CommandHandler("help", help))
-    dp.add_handler(CommandHandler("profile", profile))
+    dp.add_handler(CommandHandler("profile", get_profile))
     dp.add_handler(CommandHandler("lang", set_lang,
                                   pass_args=True))
     dp.add_handler(CommandHandler("eth", set_eth,
                                   pass_args=True))
     dp.add_handler(CommandHandler("email", set_email,
                                   pass_args=True))
+    dp.add_handler(CommandHandler("referral", get_referral)) 
+    dp.add_handler(CommandHandler("claim", get_token))
+                                  
     # dp.add_handler(CommandHandler("lang", set_lang,
                                   # pass_args=True))
 
@@ -303,28 +409,30 @@ def main():
         # fallbacks=[CommandHandler('cancel', cancel)]
     # )
     # Add conversation handler with the states GENDER, PHOTO, LOCATION and BIO
-    # conv_handler = ConversationHandler(
-        # entry_points=[CommandHandler('start', start)],
+    guide_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start,
+                                  pass_args=True)],
 
-        # states={
-            # LANG: [RegexHandler('^(zh-cn|en|kr)$', lang)],
-            # ETH: [MessageHandler(Filters.text, eth)],
-            # EMAIL: [MessageHandler(Filters.text, email)]
+        states={
+            # ETH: [RegexHandler('^(zh-cn|en|kr)$', guide_eth)],
+            GUIDE_ETH: [RegexHandler('^(Set Profile|Maybe Later)$', guide_eth)],
+            GUIDE_EMAIL: [MessageHandler(Filters.text, guide_email)],
+            GUIDE_REFERRAL: [MessageHandler(Filters.text, guide_referral)],
 
-            # # PHOTO: [MessageHandler(Filters.photo, photo),
-                    # # CommandHandler('skip', skip_photo)],
+            # PHOTO: [MessageHandler(Filters.photo, photo),
+                    # CommandHandler('skip', skip_photo)],
 
-            # # LOCATION: [MessageHandler(Filters.location, location),
-                       # # CommandHandler('skip', skip_location)],
+            # LOCATION: [MessageHandler(Filters.location, location),
+                       # CommandHandler('skip', skip_location)],
 
-            # # BIO: [MessageHandler(Filters.text, bio)]
-        # },
+            # BIO: [MessageHandler(Filters.text, bio)]
+        },
 
-        # fallbacks=[CommandHandler('cancel', cancel)]
-    # )
+        fallbacks=[CommandHandler('cancel', cancel)]
+    )
     
 
-    # dp.add_handler(conv_handler)
+    dp.add_handler(guide_handler)
     
 
     # log all errors
