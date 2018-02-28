@@ -30,7 +30,7 @@ with open('lang_list', 'r') as thefile:
     LANG_TAGS = thefile.read().split('\n')
     
 INFOS = pd.read_excel('infos.xlsx')
-
+VERSION = 20180228
 tiny = Tiny_referrals(db_path='referrals.sqlite', REFERRAL_SZIE=1000000, REFFERAL_LENGTH=8, overwrite=False,
                       field_names_text=['eth', 'lang', 'email'], field_names_num=['token'], CLAIMED_KEYS=['eth', 'email'])
 
@@ -281,7 +281,9 @@ def set_email(bot, update, args):
             {'\$username': user.username,
             '\$current_email':current_email_address}
             )
-
+            
+def get_version(bot, update):
+    update.message.reply_text(VERSION)
 
 def get_profile(bot, update):
     tiny.connect()
@@ -396,6 +398,7 @@ def main():
                                   pass_args=True))
     dp.add_handler(CommandHandler("referral", get_referral)) 
     dp.add_handler(CommandHandler("claim", get_token))
+    dp.add_handler(CommandHandler("version", get_version))
                                   
     # dp.add_handler(CommandHandler("lang", set_lang,
                                   # pass_args=True))
