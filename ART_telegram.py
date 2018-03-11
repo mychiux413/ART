@@ -30,7 +30,7 @@ with open('lang_list', 'r') as thefile:
     LANG_TAGS = thefile.read().split('\n')
     
 INFOS = pd.read_excel('infos.xlsx')
-VERSION = 20180228
+VERSION = 20180311
 tiny = Tiny_referrals(db_path='referrals.sqlite', REFERRAL_SZIE=1000000, REFFERAL_LENGTH=8, overwrite=False,
                       field_names_text=['eth', 'lang', 'email'], field_names_num=['token'], CLAIMED_KEYS=['eth', 'email'])
 
