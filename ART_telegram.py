@@ -46,13 +46,18 @@ GUIDE_ETH, GUIDE_EMAIL, GUIDE_REFERRAL = range(3)
 # markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False)
 
 def start(bot, update, args):
-    if len(args) > 0:
-        update.message.reply_text('The referral code is {}'.format(args[0]))
     tiny.connect()
     user = update.message.from_user
     lang = get_lang(tiny, user)
+    
+    if len(args) > 0:
+        response = tiny.vote(user.id, args[0])
+        if not response:
+            update.message.reply_text('Your referral code {} is not valid'.format(args[0]))
+        else:
+            print('vote referral {} is valid'.format(args[0]))
+  
 
-    #if not tiny.user_claimed(user.id):
     if True:
         reply_keyboard = [['Set Profile', 'Maybe Later']]
         markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
@@ -104,6 +109,7 @@ def guide_email(bot, update):
             )
         return GUIDE_EMAIL
         
+
     
 def guide_referral(bot, update):
     tiny.connect()
@@ -122,13 +128,25 @@ def guide_referral(bot, update):
     
 def is_eth_valid(eth_address):
     if eth_address[:2] == '0x':
-        return True
+        if len(re.findall('[0-9a-z]',eth_address[2:].lower())) == 40:
+            return True
+        else:
+            return False
     else:
         return False
         
+def tidy_email(email):
+    lr = email.split('@')
+    lr[0] = re.sub('\.', '', lr[0])
+    lr[0] = re.sub('\+.+', '', lr[0])
+    return '@'.join(lr)
+        
 def is_email_valid(email_address):
     if email_address.find('@') > -1:
-        return True
+        if email_address.split('@')[1].find('.') > -1:
+            return True
+        else:
+            return False
     else:
         return False
     
@@ -256,7 +274,7 @@ def set_email(bot, update, args):
     lang = get_lang(tiny, user)
         
     if len(args) > 0:
-        email_address = str(args[0])
+        email_address = tidy_email(str(args[0]))
         if is_email_valid(email_address):
             tiny.set_user_profiles(user.id, {'email':email_address})
             show_infos(update, 'set_email_done', lang,
